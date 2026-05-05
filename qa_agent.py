@@ -11,10 +11,12 @@ from langchain_openai import ChatOpenAI
 
 
 def format_document(document: Document, index: int) -> str:
-    source = document.metadata.get("source", "unknown source")
-    title = document.metadata.get("title")
-    heading = f"[{index}] {title} ({source})" if title else f"[{index}] {source}"
-    return f"{heading}\n{document.page_content}"
+    metadata = document.metadata
+    source = metadata.get("source", "unknown source")
+    title = metadata.get("title")
+    source_type = metadata.get("source_type", "doc")
+    label = f"{title} ({source})" if title else source
+    return f"[{index}] [{source_type}] {label}\n{document.page_content}"
 
 
 def create_document_search_tool(
@@ -26,7 +28,7 @@ def create_document_search_tool(
 
     @tool
     def search_ingested_documents(query: str) -> str:
-        """Search the ingested website documents for information relevant to a question."""
+        """Search the ingested documents (web pages and Confluence) for context."""
         documents = vector_store.similarity_search(query, k=search_results)
 
         if not documents:
@@ -42,11 +44,11 @@ def create_document_search_tool(
 
 def build_agent(llm: ChatOpenAI, document_search_tool: BaseTool):
     system_prompt = (
-        "You answer questions using the ingested website documents. "
-        "Always call the search_ingested_documents tool before answering. "
-        "Base your answer on the tool results. If the tool does not return "
-        "relevant context, say that you could not find the answer in the "
-        "ingested documents. Cite source URLs when they are available."
+        "You answer questions using ingested documents from public websites "
+        "and Confluence pages. Always call the search_ingested_documents tool "
+        "before answering. Base your answer on the tool results. If the tool "
+        "does not return relevant context, say that you could not find the "
+        "answer in the ingested documents. Cite source URLs when available."
     )
     return create_agent(
         model=llm,
