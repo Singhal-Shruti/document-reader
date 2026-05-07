@@ -27,8 +27,8 @@ def add_arguments(subparsers: argparse._SubParsersAction) -> None:
     add_chunk_args(parser)
 
     parser.add_argument("--max-depth", type=int, default=5)
-    parser.add_argument("--max-breadth", type=int, default=20)
-    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--max-breadth", type=int, default=200)
+    parser.add_argument("--limit", type=int, default=100)
     parser.add_argument(
         "--instructions",
         help="Optional natural-language instructions to guide the Tavily crawl.",
@@ -38,6 +38,15 @@ def add_arguments(subparsers: argparse._SubParsersAction) -> None:
         choices=["basic", "advanced"],
         default="advanced",
         help="Tavily extraction depth.",
+    )
+    parser.add_argument(
+        "--select-paths",
+        nargs="*",
+        metavar="REGEX",
+        help=(
+            "Regex patterns matched against URL paths; only matching paths "
+            "will be crawled. Example: --select-paths '/v2/.*' '/docs/.*'"
+        ),
     )
 
     add_summary_arg(parser)
@@ -52,5 +61,6 @@ def run(args: argparse.Namespace) -> None:
         limit=args.limit,
         instructions=args.instructions,
         extract_depth=args.extract_depth,
+        select_paths=args.select_paths,
     )
     run_ingestion_pipeline(args, documents, source_label=args.url)

@@ -26,17 +26,27 @@ def crawl_web(
     limit: int,
     instructions: str | None,
     extract_depth: Literal["basic", "advanced"],
+    select_paths: list[str] | None = None,
 ) -> list[Document]:
-    """Crawl a public URL with Tavily and return LangChain documents."""
+    """Crawl a public URL with Tavily and return LangChain documents.
+
+    `select_paths` is an optional list of regular expressions matched against
+    the URL path component. When provided, Tavily only follows links whose
+    path matches one of the patterns (e.g. ["/v2/.*", "/api/docs/.*"]).
+    """
     require_env_var("TAVILY_API_KEY")
 
-    crawler = TavilyCrawl(
-        max_depth=max_depth,
-        max_breadth=max_breadth,
-        limit=limit,
-        instructions=instructions,
-        extract_depth=extract_depth,
-    )
+    tavily_kwargs: dict = {
+        "max_depth": max_depth,
+        "max_breadth": max_breadth,
+        "limit": limit,
+        "instructions": instructions,
+        "extract_depth": extract_depth,
+    }
+    if select_paths:
+        tavily_kwargs["select_paths"] = select_paths
+
+    crawler = TavilyCrawl(**tavily_kwargs)
     crawl_result = crawler.invoke({"url": _validate_url(url)})
 
     if not isinstance(crawl_result, dict):
@@ -59,6 +69,8 @@ def crawl_web(
                 },
             )
         )
+        
+    print("length of documents: ", len(documents))
 
     if not documents:
         raise RuntimeError(f"Tavily returned no crawlable text for URL: {url}")
