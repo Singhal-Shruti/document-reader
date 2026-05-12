@@ -45,7 +45,7 @@ SYSTEM_PROMPT = (
     "flow that is not supported by the docs.\n"
     "    - For EACH step, identify the exact API endpoint from the "
     "ingested API docs that performs that step. If no ingested endpoint "
-    "matches a step, say so explicitly instead of fabricating one.\n"
+    "matches a step, say so explicitly instead of fabricating one. and also mention that step in the output without API reference\n"
     "    - For each API step, return the following details EXACTLY as "
     "they appear in the ingested docs (do NOT improvise, rename, "
     "reformat, or invent fields, types, or values):\n"

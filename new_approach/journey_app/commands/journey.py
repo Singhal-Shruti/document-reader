@@ -17,15 +17,18 @@ def add_arguments(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         COMMAND,
         help=(
-            "Ask the agent to gather context from Confluence/Jira/GitHub "
-            "and map the journey to APIs in the Swagger store."
+            "Ask the agent. For feature/journey questions it gathers "
+            "context from Confluence/Jira/GitHub and maps the journey to "
+            "APIs in the Swagger store. For general questions it just "
+            "returns grounded context from whichever stores have it."
         ),
     )
     parser.add_argument(
         "question",
         help=(
-            "Natural-language journey description, e.g. \"What APIs are "
-            "involved in onboarding a new user?\""
+            "Natural-language question. May be a feature/journey query "
+            "(\"What APIs are involved in onboarding a new user?\") or a "
+            "general one (\"Who attended the recent platform sync?\")."
         ),
     )
     add_chroma_args(parser)
