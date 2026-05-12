@@ -1,10 +1,11 @@
 """Swagger / OpenAPI loader built on LangChain's OpenAPI Toolkit.
 
 Uses ``langchain_community.agent_toolkits.openapi.spec.reduce_openapi_spec``
-to dereference and condense an OpenAPI 2.0 / 3.x document into a compact
-endpoint-oriented form, then converts each endpoint into a LangChain
-``Document`` so it can be chunked, embedded and stored alongside other
-sources.
+to dereference and condense an OpenAPI 2.0 / 3.x document into endpoint-
+oriented chunks, then converts each operation into a LangChain
+``Document``. The resulting metadata (``http_method``, ``route``,
+``spec_title`` etc.) is what the journey agent uses to surface the API
+list.
 """
 
 from __future__ import annotations
@@ -22,14 +23,10 @@ from langchain_community.agent_toolkits.openapi.spec import (
 )
 from langchain_core.documents import Document
 
-from agents_app.config import SOURCE_TYPE_SWAGGER
+from journey_app.config import SOURCE_SWAGGER
 
 
 def _load_raw_spec(source: str) -> dict[str, Any]:
-    """Read a Swagger/OpenAPI document from a local path or URL.
-
-    JSON and YAML payloads are both supported.
-    """
     parsed = urlparse(source)
     if parsed.scheme in {"http", "https"}:
         response = requests.get(source, timeout=30)
@@ -60,49 +57,40 @@ def _spec_version(spec: dict[str, Any]) -> str:
     return str(spec.get("info", {}).get("version") or "unknown")
 
 
-def _endpoint_payload(
-    name: str, description: str | None, docs: dict
-) -> dict[str, Any]:
-    """Build a JSON payload for one endpoint suitable for ``RecursiveJsonSplitter``."""
-    method, _, route = name.partition(" ")
-    payload: dict[str, Any] = {
-        "kind": "endpoint",
-        "endpoint": name,
-        "method": method,
-        "path": route,
-    }
-    cleaned_description = (description or "").strip()
-    if cleaned_description:
-        payload["description"] = cleaned_description
+def _format_endpoint(name: str, description: str | None, docs: dict) -> str:
+    lines: list[str] = [f"# {name}"]
+    if description:
+        lines.append(description.strip())
     if docs:
-        payload["spec"] = docs
-    return payload
-
-
-def _dump_json(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, indent=2, sort_keys=True, default=str)
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(docs, indent=2, sort_keys=True, default=str))
+        lines.append("```")
+    return "\n".join(lines).strip()
 
 
 def _overview_document(
     reduced: ReducedOpenAPISpec, *, source: str, title: str, version: str
 ) -> Document:
     server_urls = [s.get("url", "") for s in reduced.servers if isinstance(s, dict)]
-    overview_payload: dict[str, Any] = {
-        "kind": "overview",
-        "title": title,
-        "version": version,
-        "servers": [url for url in server_urls if url],
-        "endpoint_count": len(reduced.endpoints),
-    }
-    cleaned_description = (reduced.description or "").strip()
-    if cleaned_description:
-        overview_payload["description"] = cleaned_description
+    overview = "\n".join(
+        [
+            f"# {title} (v{version})",
+            "",
+            (reduced.description or "").strip(),
+            "",
+            "Servers:",
+            *(f"- {url}" for url in server_urls if url),
+            "",
+            f"Total endpoints: {len(reduced.endpoints)}",
+        ]
+    ).strip()
 
     return Document(
-        page_content=_dump_json(overview_payload),
+        page_content=overview,
         metadata={
             "source": f"{source}#overview",
-            "source_type": SOURCE_TYPE_SWAGGER,
+            "source_type": SOURCE_SWAGGER,
             "title": f"{title} - Overview",
             "spec_title": title,
             "spec_version": version,
@@ -126,7 +114,9 @@ def load_swagger(
             the API title, description, servers, and endpoint count.
 
     Returns:
-        One ``Document`` per HTTP operation (plus an optional overview).
+        One ``Document`` per HTTP operation (plus an optional overview),
+        each tagged with ``http_method`` and ``route`` metadata so the
+        journey agent can directly list the matched APIs.
     """
     raw_spec = _load_raw_spec(source)
     if "paths" not in raw_spec:
@@ -146,13 +136,12 @@ def load_swagger(
 
     for name, description, docs in reduced.endpoints:
         method, _, route = name.partition(" ")
-        payload = _endpoint_payload(name, description, docs)
         documents.append(
             Document(
-                page_content=_dump_json(payload),
+                page_content=_format_endpoint(name, description, docs),
                 metadata={
                     "source": f"{source}#{name}",
-                    "source_type": SOURCE_TYPE_SWAGGER,
+                    "source_type": SOURCE_SWAGGER,
                     "title": f"{title} - {name}",
                     "spec_title": title,
                     "spec_version": version,
